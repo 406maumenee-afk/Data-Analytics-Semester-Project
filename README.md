@@ -33,15 +33,41 @@ Our challenge is to build the Shiny web application with Leaflet interactive map
 -   **Spatial coverage:** All 50 U.S. states and Washington, D.C.
 -   **Timespan:** Current snapshot of all active stations; historical records also available.
 
-### Dataset 2: Electric Vehicle Registration Counts by State
+### Dataset 2: EV Registration Data (3 States)
 
--   **Source:** U.S. Department of Energy, Alternative Fuels Data Center (AFDC)
--   **URL:** <https://afdc.energy.gov/vehicle-registration>
--   **Description:** This dataset contains light-duty vehicle registration counts by state, derived by the National Laboratory of the Rockies with data from Experian Information Solutions.
--   **Key variables:** State, battery electric vehicle (BEV) count, plug-in hybrid electric vehicle (PHEV) count, hybrid electric vehicle (HEV) count, and total vehicle registrations.
--   **Spatial coverage:** All 50 U.S. states and Washington, D.C.
--   **Timespan:** Annual counts available for multiple years through 2023.
--   **Note:** This dataset provides state-level counts. We have reached out to Atlas EV Hub to request county-level registration data. If county-level data is unavailable, we plan to use state-level registrations combined with county-level demographics as a proxy for EV adoption patterns.
+County-level EV registration data was obtained separately for each state from three different sources:
+
+**Colorado:** - **Source:** Atlas EV Hub, EvaluateCO Dashboard (derived from Colorado DMV records)
+
+-   **URL:** <https://atlaspolicy.com/evaluateco/>
+
+-   **Description:** County-level aggregated EV registration counts including EVs on the road, original registrations, and EV market share.
+
+-   **Key variables:** County, EV original registrations, EVs on the road, EV share of total registrations.
+
+-   **Spatial coverage:** All 64 Colorado counties.
+
+**Connecticut:** - **Source:** Connecticut Open Data Portal, CT Department of Motor Vehicles
+
+-   **URL:** <https://data.ct.gov/Transportation/Electric-Vehicle-Registration-Data/y7ky-5wcz>
+
+-   **Description:** Individual vehicle-level registration records for all EVs registered in Connecticut. We aggregated these to the county level using a town-to-county crosswalk.
+
+-   **Key variables:** Vehicle make, model, type (BEV/PHEV), registration city, registration date.
+
+-   **Spatial coverage:** All 8 Connecticut counties (mapped from 169 towns).
+
+**Washington:**
+
+-   **Source:** Washington State Department of Licensing, Data.WA.gov
+
+-   **URL:** <https://data.wa.gov/Transportation/Electric-Vehicle-Population-Data/f6w7-q2d2>
+
+-   **Description:** Individual vehicle-level registration records for all EVs registered in Washington, including county of registration.
+
+-   **Key variables:** VIN, county, city, vehicle make, model, electric vehicle type (BEV/PHEV), model year.
+
+-   **Spatial coverage:** All 39 Washington counties.
 
 ### Dataset 3: County-Level Demographics (American Community Survey)
 
