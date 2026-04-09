@@ -33,7 +33,7 @@ Our challenge is to build the Shiny web application with Leaflet interactive map
 -   **Spatial coverage:** All 50 U.S. states and Washington, D.C.
 -   **Timespan:** Current snapshot of all active stations; historical records also available.
 
-### Dataset 2: Electric Vehicle Registration Counts by State
+### Dataset 2: Electric Vehicle Registration Counts by County for Colorado, Connecticut, and Washington
 
 -   **Source:** U.S. Department of Energy, Alternative Fuels Data Center (AFDC)
 -   **URL:** <https://afdc.energy.gov/vehicle-registration>
