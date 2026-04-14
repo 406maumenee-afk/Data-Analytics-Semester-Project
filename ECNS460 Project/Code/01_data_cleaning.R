@@ -16,7 +16,7 @@ library(janitor)    # for clean_names()
 
 # Clean Colorado data (already aggregated by county) 
 
-co_raw <- read_csv("/Users/sawyerbringle/Library/CloudStorage/OneDrive-MontanaStateUniversity/Maumenee, Liam's files - ECNS460 Project/Stage 1/Raw Data/EVRegistrationCO.csv")
+co_raw <- read_csv("/Raw Data/EVRegistrationCO.csv")
 
 co_clean <- co_raw %>%
   clean_names() %>%
@@ -40,7 +40,7 @@ co_clean <- co_raw %>%
 
 # Connecticut data 
 
-ct_raw <- read_csv("/Users/sawyerbringle/Library/CloudStorage/OneDrive-MontanaStateUniversity/Maumenee, Liam's files - ECNS460 Project/Stage 1/Raw Data/EVRegistrationCT.csv")
+ct_raw <- read_csv("/Raw Data/EVRegistrationCT.csv")
 
 ct_town_county <- tribble(
   ~town_pattern, ~county,
@@ -99,7 +99,7 @@ cat("Connecticut:", nrow(ct_clean), "counties loaded\n")
 # Washington data
 # WA data is also individual vehicle records but already has a county column. Just need to aggregate to county totals.
 
-wa_raw <- read_csv("/Users/sawyerbringle/Library/CloudStorage/OneDrive-MontanaStateUniversity/Maumenee, Liam's files - ECNS460 Project/Stage 1/Raw Data/EVRegistrationWA.csv")
+wa_raw <- read_csv("/Raw Data/EVRegistrationWA.csv")
 
 wa_clean <- wa_raw %>%
   clean_names() %>%
@@ -127,7 +127,7 @@ ev_by_county <- bind_rows(co_clean, ct_clean, wa_clean)
 # PART 2: Clean AFDC charging station data
 # Start with full national dataset, filter to our 3 states, keep only
 
-stations_raw <- read_csv("/Users/sawyerbringle/Library/CloudStorage/OneDrive-MontanaStateUniversity/Maumenee, Liam's files - ECNS460 Project/Stage 1/Raw Data/alt_fuel_stations (Mar 11 2026) (1).csv")
+stations_raw <- read_csv("/Raw Data/alt_fuel_stations (Mar 11 2026) (1).csv")
 
 stations_clean <- stations_raw %>%
   clean_names() %>%
@@ -242,7 +242,7 @@ reshape_census <- function(df, col_pattern) {
 }
 
 # DP05: Population + Demographics from ACS
-dp05_raw <- read_csv("/Users/sawyerbringle/Library/CloudStorage/OneDrive-MontanaStateUniversity/Maumenee, Liam's files - ECNS460 Project/Stage 1/Raw Data/ACSDP5Y2023.DP05-2026-04-07T174614.csv")
+dp05_raw <- read_csv("/Raw Data/ACSDP5Y2023.DP05-2026-04-07T174614.csv")
 
 population <- reshape_census(dp05_raw, "!!Estimate$") %>%
   filter(str_detect(label, "^\\s+Total population$")) %>%
@@ -267,7 +267,7 @@ demographics <- reshape_census(dp05_raw, "!!Estimate$") %>%
   pivot_wider(names_from = variable, values_from = value)
 
 # S1901: Median household income 
-s1901_raw <- read_csv("/Users/sawyerbringle/Library/CloudStorage/OneDrive-MontanaStateUniversity/Maumenee, Liam's files - ECNS460 Project/Stage 1/Raw Data/ACSST5Y2023.S1901-2026-04-07T174729.csv")
+s1901_raw <- read_csv("/Raw Data/ACSST5Y2023.S1901-2026-04-07T174729.csv")
 
 median_income <- reshape_census(s1901_raw, "!!Households!!Estimate$") %>%
   filter(str_detect(label, "Median income")) %>%
