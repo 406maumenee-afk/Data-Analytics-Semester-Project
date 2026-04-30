@@ -1,0 +1,121 @@
+---
+title: "Final Report"
+author: "Sawyer Bringle and Liam Maumenee"
+date: "2026-04-29"
+output: html_document
+---
+
+# EV Charging Infrastructure Gaps Across Colorado, Connecticut, and Washington
+
+**ECNS 460 - Final Report** Sawyer Bringle and Liam Maumenee
+
+### **Introduction**
+
+Electric vehicle adoption has grown rapidly across the United States, and this growth has raised concerns about the adequacy of charging infrastructure. The distribution of EV charging stations varies widely: some regions have dense networks of chargers, while others remain significantly underserved. Understanding where these gaps exist, and what demographic or geographic factors predict them, is critical for policymakers and private companies deciding where to invest in new charging infrastructure.
+
+Our project examines EV charging infrastructure gaps across three states, Colorado, Connecticut, and Washington, by comparing county-level EV adoption with the availability of public charging stations. We combine this with demographic data to explore how county level demographics are associated with charging access.
+
+### **The Project Challenge**
+
+Our primary challenge we decided to take on in Stage 1 of the project was to build a shiny dashboard that had an interactive map. Neither of us had any experience with shiny or with creating interactive maps. We then extended the project beyond the shiny dashboard to include a Lasso regression model to create a model that can predict which counties are seeing the fastest growth in charging infrastructure, providing a quantitative complement to the descriptive findings of the dashboard.
+
+### Data
+
+We use four publicly available datasets from three sources:
+
+**EV Registration Data:** The three states’ data arrived in different formats. Colorado was already aggregated to the county level, so it was easy to clean. Connecticut and Washington provided individual vehicle records that we aggregated to the county level by counting registrations per county. Connecticut presented a unique challenge: the data records each vehicles’ town of registration, but Connecticut uses 169 towns rather than counties. We built a crosswalk mapping each town to one of Connecticut’s 8 historical counties, which allowed us to aggregate to a comparable geographic level.
+
+**Charging Stations AFDC:** We filtered the national AFDC dataset to include only electric vehicle stations in our three states with an “open” status. We then performed a spatial join using the sf package in R, matching each station’s latitude and longitude coordinates to U.S Census County shapefiles to assign every station to a county. This allowed us to count the number of stations and charging ports per county. A complication arose in Connecticut, where the Census Bureau replaced counties with “Planning Regions” in 2022. We addressed this by mapping the planning region names back to historical county names used in the EV registration data.
+
+**ACS Demographics:** The ACS data was downloaded in a wide format, with counties as columns and variables as rows. We reshaped this to a long format and extracted total population, median household income, median age, and racial/ethnic population counts for each county. For Connecticut, we again had to map the planning regions to historical counties.
+
+**Final Dataset:** We joined the EV registration counts, station counts, and census demographics into a single master dataset at the county level. We then calculated several derived metrics: EVs per charging station, EVs per 1,000 residents, stations per 100,000 residents, and percent nonwhite population.
+
+### Descriptive Findings
+
+Before diving into the more technical aspect of the project we built some visualizations to help us understand the descriptive relationships between some of the variables in our dataset. For our first figure we wanted to have a baseline understanding for where the majority of EVs are located in each state. Figure 1 shows that EVs are heavily concentrated in certain urban areas across the three states. For figure 2 we looked at median household income vs EV adoption rate. From this plot we find that median household income is positively correlated with EV adoption rates. For figure 3 we look at the relationship between charging stations and EVs on the road but on a log-log scale since both of these variables span different orders of magnitude. From this plot we find that the two variables are positively correlated with each other. For figures 4.1 - 4.3 we wanted to gain experience with spatial mapping data so we overalayed all of the open stations with each of the three states. We wanted to add a deeper element of analysis so we overlayed a cloropleth that looks at the percent non-white per county to see if this had any causal effect on where station infrastructure was being built. For figure 5 we wanted identify the top 15 charging desert counties where charging infrastructure is lagging behind the EV adoption rate.
+
+```{r}
+#| echo: false
+knitr::include_graphics("output/figures/fig1_top_counties_ev.png")
+knitr::include_graphics("output/figures/fig2_income_vs_ev_adoption.png")
+knitr::include_graphics("output/figures/fig3_stations_vs_evs.png")
+knitr::include_graphics("output/figures/fig4.1_map_colorado.png")
+knitr::include_graphics("output/figures/fig4.2_map_connecticut.png")
+knitr::include_graphics("output/figures/fig4.3_map_washington.png")
+knitr::include_graphics("output/figures/fig5_charging_deserts.png")
+```
+
+### Charging Desert Analysis
+
+A central question of this project is where EV adoption has outrun the public charging network. We define a charging desert as a county where the ratio of registered EVs to public charging stations is so high that drivers face access constraints relative to peers in their state. This is the metric most directly useful to the audiences identified in our Stage 1 plan: state transportation planners deciding where to site grant-funded infrastructure, EV charging companies prioritizing private build-out, and policymakers writing equity language into the next round of incentives.
+
+Construction of the metric. Starting from the county-level master dataset, we computed EVs per charging station for every county in Colorado, Connecticut, and Washington. To avoid small samples that disrupt proportions, we screened out counties with fewer than 50 registered EVs or fewer than one operating station. We ranked the remaining counties, and the top fifteen are visualized in Figure 5. To determine counties that could be potential "charging deserts," we took the 75th percentile of counties with EV's per charging station and used that as a threshold to determine which counties are potential charging deserts. We found this threshold to sit just around 70 EV's per station.
+
+The top counties that are at risk of being a charging desert have the common theme of being suburban and exurban areas, not the assumed rural community. These are places where EV adoption has accelerated alongside population and income growth, while station infrastructure has not kept pace. The pattern is consistent with what Figure 3 already showed at the state level: stations and EVs are tightly correlated on a log scale, but residuals above the trend line (more EVs than stations would predict) cluster in commuter-belt counties. However, to measure this threshold, we had to make few assumptions. The metric counts stations, not ports, and treats a single Level 2 charger as equivalent to a DC fast-charger bank. There is also no way to determine if EV owners in counties with charging deserts experience wait times. The 75th percentile is an estimated guess, to draw a baseline in the data and show that charging deserts do exist.
+
+### Predicting Station Growth With a Lasso Regression
+
+To complement the descriptive findings we created a predictive model with the goal of finding which counties are on the steepest growth trajectories. Since we did not have EV registration counts time series data, we use proportional growth in charging stations between 2020 and 2024 as the outcome variable. Stations follow demand reasonably closely, so this serves as a defensible proxy for where EV adoption is accelerating. The model is, in effect, asking if we are to hold current EV stock and 2020 infrastructure fixed, which counties are seeing the fastest expansion of charging supply.
+
+We chose Lasso regression rather than a more flexible model such as a random forest for two reasons. First, ease of interpretability: Lasso produces a sparse set of coefficients that can be read directly. The second is that we covered Lasso models in class and we have a much better understanding of these models compared to others. The predictors include median household income, log population, percent nonwhite, median age, EVs per 1,000 residents, stations open by 2020, stations per 100,000 residents, and an early-adopter indicator.
+
+We tuned the penalty parameter using five-fold cross-validation on a 75-25 training-testing split. The model performance on the test set was modest, with an R² of 0.162 and an RMSE of 2.47. The model is meaningful but limited and has moderate predictive accuracy of county level station growth. The Lasso coefficients are interpretable in the expected direction. Counties with more stations already in place by 2020 see slower proportional growth to counties with less, and counties with higher current EV adoption per capita tend to see faster station expansion. Demographic predictors enter with smaller coefficients, indicating that 2020 infrastructure and current adoption levels are doing most of the predictive work.
+
+Creating the predictive model proved to be very difficult as we wanted to create some form of model to predict when and where EV adoption rates would increase. However the biggest challenge with this was access to data, as we were unable to find any form of time series data on EV registrations. To combat this issue we created this model. However if we were to extend this for future work we would look at finding may in depth time series data on EV registrations. We could also extend this by looking at different types of machine learning models such as a random forest model.
+
+### Interactive Dashboard
+
+The product and challenge of this project is a Quarto Shiny dashboard that lets users navigate every piece of our research. The dashboard is organized into six tabs: an Overview, a Visualizations tab, a Charging Deserts tab, a Predictive Model tab, an Interactive Map, and a Summary page. Neither Shiny nor Leaflet was covered in the course, so we started from a dashboard template and worked through documentation and explored the internet to learn how to lay out the page and wire the map to our data.
+
+The Overview tab gives the headline numbers of the data set: total EVs, total stations, and the average EVs-per-station ratio. The overview also includes a per-state summary table and a distribution chart of EVs-per-station by state. The Visualizations tab carries the five figures we developed in Stage 2. The Charging Deserts tab presents the ranked counties most at risk of becoming deserts, alongside the underlying EV and station counts.
+
+The Predictive Model tab is our primary analytical framework. We fit a Lasso regression of county-level EV-growth potential on demographic and infrastructure predictors. The dashboard exposes the retained coefficients, the held-out test metrics, and a ranked table of the ten counties with the highest predicted growth.
+
+**Interactive Map: Challenge**
+
+The Interactive Map is the fourth tab of the dashboard and an extension of the challenge component in our project. The map renders every operating EV charging station across the three study states on top of a county choropleth that the user can recolor by EV count, EVs per station, percent nonwhite population, or median household income. A state selector lets the user jump directly between Colorado, Connecticut, and Washington, while also re-scaling to fit the user's screen dimensions. Clicking a county opens a popup panel with that county's summary statistics.
+
+The "fly between states" behavior is the feature we think makes the map genuinely useful for the audiences we set out to serve. A state planner does not stop at "where are the worst counties in my state," but they want to know how a specific county is performing compared to other counties or states, and whether the demographic story that explains adoption in Connecticut also holds in Washington. A static figure can answer one of those questions at a time, while the interactive map answers all of them in the same view. This is the UI that operators evaluating EV infrastructure gaps can use to be efficient and accurate with their work. We chose Leaflet over a static ggplot map for exactly this reason. A static figure can show the top fifteen counties or a single choropleth, but it cannot answer all of the questions at once. Wrapping the data in an interactive UI lets users ask their own questions of that data set and answer them immediately.
+
+Building the map surfaced a handful of technical challenges worth mentioning. The biggest came from Connecticut's 2022 transition from counties to nine "Planning Regions," the county shapefiles we pulled from the U.S. Census `tigris` package returned planning regions, while our EV registration and ACS data still keyed off the eight historical counties. Before anything lined up on the map, we had to build a planning-region to county crosswalk and apply it to both the station spatial join and the choropleth polygons. Another challenge we faced was the very different geographic scales of the three study states. The fixed Leaflet bounding box that framed Connecticut nicely left Washington unreadable, and vice versa. Because of this, we redesigned the state selector to recomputes the map's center and zoom on each switch. A third challenge was integrating Leaflet with the Quarto Shiny runtime, where reactivity inside a dashboard chunk behaves a little differently from a standard Shiny app. Trying to get the layer toggles and the county side panel to update cleanly took meaningful debugging of the input bindings before the map felt responsive.
+
+### Conclusion
+
+Across Colorado, Connecticut, and Washington, the gap between EV adoption and public charging infrastructure is not where most readers would expect. The desert threshold of roughly 70 EVs per station identifies suburban and exurban commuter areas, not rural counties, as the places where EV growth has run furthest ahead of station build-out. Income and demographics matter less than we hypothesized in Stage 2, while existing infrastructure stock and current per-capita adoption do most of the explanatory work.
+
+The dashboard and interactive map are the deliverable for the Stage 1 challenge we set ourselves: putting these findings in front of the planners, operators, and policymakers we set out to serve, in a form they can explore themselves rather than having to re-run the analysis. The desert ranking gives a planner a triage list, an operator a private-investment heat map, and a policymaker a candidate set for equity language in the next round of incentives. The Lasso model (test R-Squared = 0.162) extends that descriptive layer with a predictive one, and reinforces the same story: counties with more 2020 stations already in place see slower proportional growth, while higher current EV adoption per capita predicts faster station expansion. The analysis is bounded by the three-state scope, by counting stations rather than ports, and by using station growth as a proxy for EV growth in the absence of time-series registration data.
+
+What we will carry forward most is having learned how to fold every stage of the project into a single place. The data cleaning, the descriptive figures, the charging-desert ranking, the Lasso predictions, and the interactive map all live behind one dashboard a non-author can walk through start to finish. Neither of us had touched Shiny or Leaflet before this project, and getting the interactive map to work end-to-end and then wiring every other piece of the project into the same place, is the part we will take most away from this project.
+
+### References
+
+U.S. Department of Energy, Alternative Fuels Data Center. (2026). *Alternative fueling station locations* [Data set]. Retrieved March 11, 2026, from <https://afdc.energy.gov/data_download>
+
+Atlas Public Policy. (2026). *State EV registration data* [Data set]. Atlas EV Hub. <https://www.atlasevhub.com/market-data/state-ev-registration-data/>
+
+State of Connecticut. (2026). *Electric vehicle registration data* [Data set]. Connecticut Open Data Portal. <https://data.ct.gov/Transportation/Electric-Vehicle-Registration-Data/y7ky-5wcz>
+
+Washington State Department of Licensing. (2026). *Electric vehicle population data* [Data set]. Washington State Open Data Portal. <https://data.wa.gov/Transportation/Electric-Vehicle-Population-Data/f6w7-q2d2>
+
+U.S. Census Bureau. (2023). *American Community Survey 5-year estimates, Table DP05: ACS demographic and housing estimates* [Data set]. <https://data.census.gov/table/ACSDP5Y2023.DP05>
+
+U.S. Census Bureau. (2023). *American Community Survey 5-year estimates, Table S1901: Income in the past 12 months (in 2023 inflation-adjusted dollars)* [Data set]. <https://data.census.gov/table/ACSST5Y2023.S1901>
+
+U.S. Census Bureau. (2022). *TIGER/Line shapefiles: Counties (and equivalent)* [Data set]. <https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html>
+
+Walker, K., & Rudis, B. (2024). *tigris: Load Census TIGER/Line shapefiles* (R package version 2.x) [Computer software]. CRAN. <https://CRAN.R-project.org/package=tigris>
+
+Cheng, J., Karambelkar, B., & Xie, Y. (2024). *Leaflet for R* [Software documentation]. Posit / RStudio. <https://rstudio.github.io/leaflet/>
+
+Cheng, J. (2024). *Leaflet for R: Choropleths* [Software documentation]. Posit / RStudio. <https://rstudio.github.io/leaflet/articles/choropleths.html>
+
+Cheng, J. (2024). *Leaflet for R: Using Leaflet with Shiny* [Software documentation]. Posit / RStudio. <https://rstudio.github.io/leaflet/articles/shiny.html>
+
+Posit Software, PBC. (2024). *SuperZip example* [Shiny application]. Shiny Gallery. <https://shiny.posit.co/r/gallery/interactive-visualizations/superzip-example/>
+
+Posit Software, PBC. (2024). *Quarto dashboards: Layout* [Software documentation]. <https://quarto.org/docs/dashboards/layout.html>
+
+Posit Software, PBC. (2024). *Quarto dashboards with Shiny for R* [Software documentation]. <https://quarto.org/docs/dashboards/interactivity/shiny-r.html>
+
+Anthropic. (2026). *Claude* (Sonnet 4.6) [Large language model]. <https://www.anthropic.com/claude>

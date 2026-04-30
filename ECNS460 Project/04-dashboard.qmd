@@ -1,0 +1,561 @@
+---
+title: "EV Charging Infrastructure Gaps"
+author: "Sawyer Bringle & Liam Maumenee"
+format:
+  dashboard:
+    orientation: rows
+    theme: cosmo
+    icon: github
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+# Packages
+library(shiny)
+library(leaflet)
+library(tidyverse)
+library(sf)
+library(plotly)
+library(scales)
+library(DT)
+
+load("clean_data/ev_final.RData")
+load("clean_data/county_map.RData")
+load("clean_data/stations_with_county.RData")
+load("clean_data/desert_pool.RData")
+load("clean_data/dashboard_summary.RData")
+load("clean_data/predictive_model.RData")
+load("clean_data/visualizations.RData")
+
+# Drop stations missing coordinates for leaflet map
+stations <- stations_with_county |>
+  filter(!is.na(latitude), !is.na(longitude))
+
+# Cosmetic palette + label maps used only by the dashboard
+state_colors <- c("CO" = "#4A6FA5", "CT" = "#0072B2", "WA" = "#B7A57A")
+state_labels <- c("CO" = "Colorado", "CT" = "Connecticut", "WA" = "Washington")
+
+# Human-readable names for the Lasso predictors (used on the Predictive
+# Model tab). Keys must match the variable names in predictive_model$coefs.
+predictor_labels <- c(
+  median_household_income = "Median Income",
+  log_population          = "Log Population",
+  pct_nonwhite            = "% Nonwhite",
+  median_age              = "Median Age",
+  evs_per_1000_pop        = "EVs / 1K Pop",
+  stations_by_2020        = "Stations by 2020",
+  stations_per_100k_pop   = "Stations / 100K Pop"
+)
+
+# Unpack summary stats so the existing chunks below don't have to change
+n_counties_total    <- dashboard_summary$n_counties_total
+total_evs           <- dashboard_summary$total_evs
+total_stations_n    <- dashboard_summary$total_stations_n
+avg_evs_per_station <- dashboard_summary$avg_evs_per_station
+desert_threshold    <- dashboard_summary$desert_threshold
+n_deserts           <- dashboard_summary$n_deserts
+n_qualifying        <- dashboard_summary$n_qualifying
+desert_state_counts <- dashboard_summary$desert_state_counts
+```
+
+# Overview
+
+## Row {height="22%"}
+
+```{r}
+#| content: valuebox
+#| title: "Counties Studied"
+#| color: "#4A6FA5"
+#| align: "center"
+list(value = format(n_counties_total))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Total EVs on Road"
+#| color: "#B7A57A"
+#| align: "center"
+list(value = format(total_evs, big.mark = ","))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Charging Stations"
+#| color: "#4A6FA5"
+#| align: "center"
+list(value = format(total_stations_n, big.mark = ","))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Avg EVs per Station"
+#| color: "#B7A57A"
+#| align: "center"
+list(value = format(avg_evs_per_station, big.mark = ","))
+```
+
+## Row {height="78%"}
+
+### Column {width="65%"}
+
+```{r}
+#| title: "Summary by State"
+# Built upstream in 01_data_cleaning.R as dashboard_summary$state_summary.
+# The dashboard just renders it — no recomputation here.
+knitr::kable(dashboard_summary$state_summary, align = "cccccccc")
+```
+
+
+### Column {width="35%"}
+
+::: {.card title="About this Dashboard"}
+**Project:** ECNS 460 Term Project — *EV Charging Infrastructure Gaps*
+
+**Authors:** Sawyer Bringle & Liam Maumenee
+
+**Montana State University**
+
+**Course:** ECNS 460
+
+**Question:** Where are the gaps between EV adoption and charging infrastructure, and which counties are most at risk of becoming charging deserts?
+
+:::
+
+# Visualizations
+
+## Row {.tabset}
+
+```{r}
+# pull chart from visualizations Rdata set for each figure 1-5
+#| title: "Top Counties by EVs"
+visualizations$fig1
+```
+
+```{r}
+#| title: "Income vs EV Adoption"
+visualizations$fig2
+```
+
+```{r}
+#| title: "Stations vs EVs"
+visualizations$fig3
+```
+
+```{r}
+#| title: "Percent Nonwhite Population vs. Charging Access"
+
+visualizations$p_co
+visualizations$p_ct
+visualizations$p_wa
+
+```
+
+```{r}
+#| title: "Top Charging Deserts"
+visualizations$fig5
+```
+
+
+
+
+# Charging Deserts
+
+## Row {height="22%"}
+
+```{r}
+#| content: valuebox
+#| title: "Charging-Desert Counties"
+#| color: "#4A6FA5"
+#| align: "center"
+list(value = n_deserts)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Threshold (EVs / Station)"
+#| color: "#B7A57A"
+list(value = format(round(desert_threshold, 1), big.mark = ","))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Qualifying Counties"
+#| color: "#4A6FA5"
+#| align: "center"
+list(value = n_qualifying)
+```
+
+
+
+## Row {height="78%"}
+
+### Column {width="40%"}
+
+::: {.card title="What is a 'Charging Desert'?"}
+
+A **charging desert** is a county where existing EV charging infrastructure is most stretched relative to the EV fleet already on the road.
+
+**Our definition:** A county in the top quartile of EVs-per-station, restricted to counties with at least 50 EVs and at least one station (so the ratio is well-defined).
+
+**Why this matters:** Counties with high EVs-per-station ratios face longer wait times, more competition for chargers, and a weaker case for new EV buyers — which can stall further adoption.
+
+**Charging Desert Threshold:** We rank every qualifying county by its EVs-per-station ratio and take the 75th percentile as the cut-off. Any county at or above that line is flagged as a desert. We chose a quartile-based threshold instead of a fixed number because the data is heavily right-skewed and a fixed number would either flag almost every county or almost none, depending on where it's set. A quartile is also relative, so the definition stays meaningful as adoption grows. With our current data the cut-off lands at roughly **70 EV's Per Station.**
+
+**Key Findings:**
+
+- 22 out of 87 qualifying ones meet the desert threshold — concentrated in WA (14) and CO (7), with only 1 in CT.
+- Deserts are mostly large suburban / exurban counties, not rural ones. Places like Snohomish (WA), Douglas and El Paso Counties (CO), where EV adoption has outpaced station rollout.
+- The gap between desert and non-desert counties is large: the median ratio is roughly 118 EVs/station in deserts vs. 26 in non-deserts. This is about a 4.5× difference.
+- Deserts are not a low-income situation: median household income is actually higher in desert counties (\~94K) than non-desert counties (\~74K). The gap is driven by demand outrunning supply in commuter counties, not by underinvestment in poor areas. This makes sense, as higher-income areas are more likely to have more EV's as they are on the higher end of the price spectrum for car brands.
+
+:::
+
+### Column {width="60%"}
+
+```{r}
+#| title: "Top 10 Charging Desert Counties"
+desert_pool |>
+  arrange(desc(evs_per_station)) |>
+  head(10) |>
+  transmute(
+    Rank             = row_number(),
+    State            = recode(state, !!!state_labels),
+    County           = county,
+    `EVs on Road`    = comma(evs_on_road),
+    Stations         = total_stations,
+    `EVs / Station`  = round(evs_per_station, 1),
+    Population       = comma(total_population),
+    `Median Income`  = paste0("$", comma(median_household_income))
+  ) |>
+  DT::datatable(
+    rownames = FALSE,
+    options = list(
+      dom = "t",
+      pageLength = 10,
+      scrollY = "100%",
+      autoWidth = TRUE
+    )
+  )
+```
+
+# Interactive Map
+
+##  {.sidebar width="320px"}
+
+```{r}
+radioButtons(
+  "map_state", "Select State:",
+  choices = c("Colorado"    = "CO",
+              "Connecticut" = "CT",
+              "Washington"  = "WA"),
+  selected = "CO",
+  inline = TRUE
+)
+
+selectInput(
+  "fill_var", "Color Counties By:",
+  choices = c(
+    "EVs per Station"             = "evs_per_station",
+    "EVs per 1,000 Residents"     = "evs_per_1000_pop",
+    "Stations per 100K Residents" = "stations_per_100k_pop",
+    "Total EVs on Road"           = "evs_on_road",
+    "Total Charging Stations"     = "total_stations",
+    "Median Household Income"     = "median_household_income",
+    "Median Age"                  = "median_age",
+    "Percent Nonwhite"            = "pct_nonwhite",
+    "Percent Hispanic"            = "pct_hispanic",
+    "Total Population"            = "total_population"
+  ),
+  selected = "evs_per_station"
+)
+
+checkboxInput("show_stations", "Show Station Markers", value = TRUE)
+
+tags$hr()
+tags$h5("Summary")
+textOutput("map_station_count")
+tags$br()
+textOutput("map_ev_count")
+
+
+```
+
+## Map
+
+```{r}
+#| title: "Stations & County Choropleth"
+leafletOutput("station_map")
+```
+
+```{r}
+#| context: server
+
+# Constants
+state_bbox <- list(
+  CO = list(lng = -105.5, lat = 39.0, zoom = 7),
+  CT = list(lng =  -72.7, lat = 41.6, zoom = 9),
+  WA = list(lng = -120.5, lat = 47.4, zoom = 7)
+)
+
+# match variables to label names for sidebar selection
+var_label <- function(v) {
+  switch(v,
+    "evs_per_station"          = "EVs per Station",
+    "evs_per_1000_pop"         = "EVs per 1K Pop.",
+    "stations_per_100k_pop"    = "Stations per 100K Pop.",
+    "evs_on_road"              = "Total EVs on Road",
+    "total_stations"           = "Total Stations",
+    "median_household_income"  = "Median Income ($)",
+    "median_age"               = "Median Age",
+    "pct_nonwhite"             = "% Nonwhite",
+    "pct_hispanic"             = "% Hispanic",
+    "total_population"         = "Total Population",
+    v
+  )
+}
+
+# Reactive filters: a function that re-runs automatically whenever the sidebar input changes
+# Both filters depend on input$map_state so if the user clicks a different state or variable object,
+# the objects below are recomputed and every chunk that calls them gets fresh data. 
+# Downstream code calls them like functions, not regular variables
+# This took us a while to figure out, we originally had it formatted inside of the sidebar
+# which didn't allow for updates automatically.
+
+filtered_counties <- reactive({
+  county_map |> filter(state_abbr == input$map_state)
+})
+
+filtered_stations <- reactive({
+  stations |> filter(state == input$map_state)
+})
+
+
+# Sidebar summary text
+output$map_station_count <- renderText({
+  paste("Stations shown:", format(nrow(filtered_stations()), big.mark = ","))
+})
+
+output$map_ev_count <- renderText({
+  total <- sum(filtered_counties()$evs_on_road, na.rm = TRUE)
+  paste("Total EVs on road:", format(total, big.mark = ","))
+})
+
+
+# Base Leaflet map, drawn once, CO is the default state
+output$station_map <- renderLeaflet({
+  leaflet() |>
+    addProviderTiles(providers$CartoDB.Positron) |>
+    setView(state_bbox$CO$lng, state_bbox$CO$lat, state_bbox$CO$zoom)
+})
+
+
+# Fly to selected state when selected on sidebar
+# With only three states being used, the other 47 states are still shown on the map, but very useless to us.
+# The observe() function allows us to zoom in on one of the three states, instead of viewing the whole U.S. 
+observe({
+  b <- state_bbox[[input$map_state]]
+  leafletProxy("station_map") |>
+    flyTo(b$lng, b$lat, b$zoom)
+})
+
+
+# Update choropleth + popup whenever the state or color-variable changes.
+# observe() also re-runs when its inputs change, but instead of returning a value, it redraws the map. 
+# Then we use leafletProxy() instead of redrawing the whole map for efficiency
+# clearShapes() and clearControls() wipe the old polygons and legend so we can add the new ones
+# without the layers piling up on every change.
+observe({
+  counties <- filtered_counties() |>
+    filter(!is.na(.data[[input$fill_var]]))
+  fv       <- input$fill_var
+  vals     <- counties[[fv]]
+  pal      <- colorNumeric("YlOrRd", domain = vals, na.color = "gray80")
+
+  popup_text <- paste0(
+    "<b>", counties$county_clean, ", ", counties$state_abbr, "</b><br>",
+    "EVs on Road: ",     format(counties$evs_on_road, big.mark = ","), "<br>",
+    "Stations: ",        counties$total_stations, "<br>",
+    "EVs per Station: ", round(counties$evs_per_station, 1), "<br>",
+    "Population: ",      format(counties$total_population, big.mark = ","), "<br>",
+    "Median Income: $",  format(counties$median_household_income, big.mark = ",")
+  )
+
+  leafletProxy("station_map") |>
+    clearShapes() |>
+    clearControls() |>
+    addPolygons(
+      data        = counties,
+      fillColor   = ~pal(counties[[fv]]),
+      fillOpacity = 0.65,
+      color       = "white",
+      weight      = 1,
+      popup       = popup_text,
+      highlightOptions = highlightOptions(
+        weight = 2, color = "#666",
+        fillOpacity = 0.85, bringToFront = TRUE
+      )
+    ) |>
+    addLegend(
+      position = "bottomright",
+      pal      = pal,
+      values   = vals,
+      title    = var_label(fv),
+      opacity  = 0.8
+    )
+})
+
+# Station markers: separate observer so toggling "Show Station Markers" only
+# redraws the dots, not the choropleth underneath.
+#
+# Like the choropleth observer, this re-runs whenever any input it reads
+# changes. It depends on input$show_stations and on filtered_stations()
+# (which depends on input$map_state). clearMarkers() wipes the old dots
+# every time, then we add fresh ones if the checkbox is on.
+observe({
+  leafletProxy("station_map") |> clearMarkers()
+
+  if (input$show_stations) {
+    leafletProxy("station_map") |>
+      addCircleMarkers(
+        data        = filtered_stations(),
+        lat         = ~latitude,
+        lng         = ~longitude,
+        radius      = 4,
+        color       = "#2166AC",
+        fillOpacity = 0.70,
+        stroke      = FALSE
+      )
+  }
+})
+```
+
+
+
+# Predictive Model
+
+## Row {height="100%"}
+
+### Column {width="35%"}
+
+::: {.card title="About this Model"}
+
+Test R-Squared = 0.16 | Test RMSE = 2.465 | 86 Counties
+
+We built a Lasso regression to complement the descriptive findings and identify which counties are on the steepest charging-growth trajectories.
+
+**Outcome:** Because we did not have time-series EV registration data, we use proportional growth in station count between 2020 and 2024 as the outcome variable. Stations follow demand reasonably closely, so this is a defensible proxy for where EV adoption is accelerating. The model is, in effect, asking: holding current EV stock and 2020 infrastructure fixed, which counties are seeing the fastest expansion of charging supply?
+
+**Why Lasso:** We chose Lasso over a more flexible model like random forest for two reasons. First, Lasso produces a sparse set of coefficients that can be interpreted directly and easily. Second, we covered Lasso in class and have a stronger working understanding of it than of less-familiar alternatives.
+
+**Predictors:** Median household income, log population, percent nonwhite, median age, EVs per 1,000 residents, stations open by 2020, stations per 100,000 residents, and an early-adopter indicator.
+
+**Tuning:** Penalty parameter tuned by 5-fold cross-validation on a 75/25 train-test split, then evaluated once on the held-out test set.
+
+**What the coefficients say:** The retained coefficients run in the expected directions. Counties with more stations already in place by 2020 see slower proportional growth than counties with fewer; counties with higher current per-capita EV adoption see faster station expansion. Demographic predictors enter with smaller coefficients, indicating that 2020 infrastructure and current adoption are doing most of the predictive work.
+
+**Assumptions:**
+
+- Station growth is a proxy for EV growth, not a direct measure.
+- Counties with zero stations in 2020 are dropped (growth rate undefined), so we miss counties going from 0 to 1+ stations.
+- A three-state sample is small, which is part of why we leaned on Lasso's regularization rather than a more flexible model.
+
+:::
+
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Lasso Coefficients (predictors normalized)"
+predictive_model$coefs |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    term = unname(predictor_labels[term]),
+    sign = if_else(estimate > 0, "Positive", "Negative")
+  ) |>
+  plot_ly(
+    x      = ~estimate,
+    y      = ~reorder(term, estimate),
+    color  = ~sign,
+    colors = c("Positive" = "#0072B2", "Negative" = "#F45D40"),
+    type   = "bar",
+    orientation = "h"
+  ) |>
+  layout(
+    xaxis = list(title = "Standardized coefficient", zerolinecolor = "#888"),
+    yaxis = list(title = ""),
+    showlegend = FALSE,
+    margin = list(l = 30, r = 20, t = 20, b = 50)
+  )
+```
+
+### Column {width="25%"}
+
+```{r}
+#| title: "Top 20 Counties by Predicted Growth"
+predictive_model$scored |>
+  arrange(desc(predicted_growth)) |>
+  slice_head(n = 20) |>
+  transmute(
+    Rank           = row_number(),
+    County         = paste0(county, ", ", state),
+    `Pred. Growth` = percent(predicted_growth, accuracy = 1)
+  ) |>
+  knitr::kable(align = "clr")
+```
+
+
+
+
+# Summary
+
+## Column {width="48%"}
+
+::: {.card title="Key Findings"}
+
+The gap is not where you'd expect. Across Colorado, Connecticut, and Washington, the counties where EV adoption has run furthest ahead of charging build-out are predominantly suburban and exurban commuter belts. Places like Snohomish (WA), Douglas (CO), and El Paso (CO). 
+
+Using the 75th percentile of qualifying counties, a rough cutoff of 70 EVs per station gave us a great baseline. 22 of 87 qualifying counties cross that line, concentrated in WA (14) and CO (7), with only 1 in CT. Deserts hold a disproportionate share of the EV fleet. The 20% of counties flagged as deserts hold roughly 71% of all EVs across the three states. The median desert county has ~118 EVs/station versus ~26 in non-desert counties — about a 4.5x difference. 
+
+Lasso further confirms the infrastructure gap. With a test R-Squared of 0.162, the Lasso shows that 2020 infrastructure stock and current per-capita adoption dominate the prediction of where new stations grow next, while demographic predictors enter with smaller coefficients than we hypothesized in Stage 2.
+
+The interactive map is a great tool that state planners, EV station developers, and anyone curious about where EV stations are placed, or if their county is at 
+risk for longer wait-times at charging stations.
+
+:::
+
+
+### Column {width="52%"}
+
+::: {.card title="Data Sources & Tools"}
+
+**Data**
+
+- **AFDC Alternative Fuel Stations** — U.S. Department of Energy, Alternative Fuels Data Center. Charging-station locations, ports, and status.
+- **EV Registrations** — Colorado Energy Office (county-level), CT DMV (vehicle-level), WA Department of Licensing (vehicle-level).
+- **ACS 5-Year Estimates (2023)** — U.S. Census Bureau. Tables DP05 (population and demographics) and S1901 (median household income).
+- **TIGER/Line Shapefiles** — U.S. Census Bureau, accessed via the `tigris` R package. County polygons for the spatial join and choropleth.
+
+**Tools**
+
+R | tidyverse | sf | tigris | janitor | tidymodels (glmnet) | leaflet | plotly | DT | Quarto | Shiny
+
+**References**
+
+*Full citations to be added in the project report.*
+
+:::
+
+::: {.card title="About"}
+**Course** \| ECNS 460 — Spring 2026
+
+**Instructor** \| Nick Hagerty
+
+**Authors** \| Sawyer Bringle & Liam Maumenee
+
+**Audience** \| State transportation planners, EV charging operators, and policymakers — the stakeholders who decide where the next round of charging investment goes.
+
+**Source code** \| `01_data_cleaning.R` through `04-dashboard.qmd` in the project repository.
+:::
